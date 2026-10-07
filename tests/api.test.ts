@@ -60,7 +60,6 @@ describe("POST /api/trips", () => {
       end: "2026-10-05T08:10:00+05:00",
       amount: 0,
       payment: "cash",
-      commission: 0,
     });
     expect(res.status).toBe(400);
   });
@@ -71,19 +70,17 @@ describe("POST /api/trips", () => {
       end: "2026-10-05T08:00:00+05:00",
       amount: 100,
       payment: "cash",
-      commission: 10,
     });
     expect(res.status).toBe(400);
   });
 
-  it("creates a trip that immediately shows up in that day's summary", async () => {
+  it("creates a trip and computes commission at the fixed 15% rate", async () => {
     const res = await postTrip({
       id: "new-1",
       start: "2026-10-05T08:00:00+05:00",
       end: "2026-10-05T08:10:00+05:00",
       amount: 1000,
       payment: "card",
-      commission: 150,
     });
     expect(res.status).toBe(201);
 
@@ -97,6 +94,20 @@ describe("POST /api/trips", () => {
     });
   });
 
+  it("ignores any commission the client sends and computes its own", async () => {
+    const res = await postTrip({
+      id: "tampered-1",
+      start: "2026-10-05T12:00:00+05:00",
+      end: "2026-10-05T12:10:00+05:00",
+      amount: 2000,
+      payment: "card",
+      commission: 1, // a client trying to lowball the platform's cut
+    });
+    expect(res.status).toBe(201);
+    const payload = await res.json();
+    expect(payload.trip.commission).toBe(300); // 15% of 2000, not 1
+  });
+
   it("does not create a duplicate when the same trip id is submitted twice", async () => {
     const body = {
       id: "dup-1",
@@ -104,7 +115,6 @@ describe("POST /api/trips", () => {
       end: "2026-10-06T08:10:00+05:00",
       amount: 500,
       payment: "cash",
-      commission: 75,
     };
 
     const first = await postTrip(body);
@@ -124,7 +134,6 @@ describe("POST /api/trips", () => {
       end: "2026-10-07T08:10:00+05:00",
       amount: 700,
       payment: "cash",
-      commission: 100,
     };
 
     const first = await postTrip(body);
@@ -143,14 +152,12 @@ describe("POST /api/trips", () => {
       end: "2026-10-08T08:10:00+05:00",
       amount: 700,
       payment: "cash",
-      commission: 100,
     });
     await postTrip({
       start: "2026-10-08T09:00:00+05:00",
       end: "2026-10-08T09:10:00+05:00",
       amount: 700,
       payment: "cash",
-      commission: 100,
     });
 
     const dayPayload = await (await getDay("2026-10-08")).json();
@@ -199,7 +206,6 @@ describe("GET /api/profile", () => {
       end: "2026-10-09T08:10:00+05:00",
       amount: 500,
       payment: "cash",
-      commission: 75,
     });
 
     const after = await (await GET_PROFILE()).json();

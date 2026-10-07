@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { findTripById, fingerprintTrip, insertTrip } from "@/lib/db";
-import { tripInputSchema } from "@/lib/shift";
+import { computeCommission, tripInputSchema } from "@/lib/shift";
 
 export async function POST(req: NextRequest) {
   let body: unknown;
@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     end: input.end,
     amount: input.amount,
     payment: input.payment,
-    commission: input.commission,
+    commission: computeCommission(input.amount),
   };
   insertTrip(trip);
 

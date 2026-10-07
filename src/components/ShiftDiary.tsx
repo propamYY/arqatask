@@ -3,7 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { shiftDayKey } from "@/lib/date";
-import type { DaySummary, PaymentMethod, Trip } from "@/lib/shift";
+import {
+  COMMISSION_RATE,
+  computeCommission,
+  type DaySummary,
+  type PaymentMethod,
+  type Trip,
+} from "@/lib/shift";
 
 const DEFAULT_DAY = "2026-10-01";
 const SHIFT_OFFSET = "+05:00";
@@ -357,7 +363,6 @@ function AddTripForm({
   const [start, setStart] = useState("08:00");
   const [end, setEnd] = useState("08:20");
   const [amount, setAmount] = useState("");
-  const [commission, setCommission] = useState("");
   const [payment, setPayment] = useState<PaymentMethod>("card");
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -375,7 +380,6 @@ function AddTripForm({
           start: `${day}T${start}:00${SHIFT_OFFSET}`,
           end: `${day}T${end}:00${SHIFT_OFFSET}`,
           amount: Number(amount),
-          commission: Number(commission),
           payment,
         }),
       });
@@ -440,18 +444,12 @@ function AddTripForm({
             className="mt-1 w-full rounded-lg border border-[#D5DBE3] px-3 py-2"
           />
         </label>
-        <label className="text-sm font-medium text-[#1C2633]">
-          Комиссия, ₸
-          <input
-            type="number"
-            min="0"
-            step="1"
-            required
-            value={commission}
-            onChange={(e) => setCommission(e.target.value)}
-            className="mt-1 w-full rounded-lg border border-[#D5DBE3] px-3 py-2"
-          />
-        </label>
+        <div className="text-sm font-medium text-[#1C2633]">
+          Комиссия ({COMMISSION_RATE * 100}%)
+          <div className="mt-1 flex h-[42px] w-full items-center rounded-lg border border-dashed border-[#D5DBE3] bg-[#F4F7FF] px-3 text-[#6B7788]">
+            −{tenge(computeCommission(Number(amount) || 0))}
+          </div>
+        </div>
       </div>
 
       <label className="text-sm font-medium text-[#1C2633]">

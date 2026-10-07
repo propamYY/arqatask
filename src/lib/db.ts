@@ -104,14 +104,12 @@ export function fingerprintTrip(input: {
   end: string;
   amount: number;
   payment: PaymentMethod;
-  commission: number;
 }): string {
   const normalized = JSON.stringify({
     start: input.start,
     end: input.end,
     amount: input.amount,
     payment: input.payment,
-    commission: input.commission,
   });
   return createHash("sha256").update(normalized).digest("hex").slice(0, 24);
 }

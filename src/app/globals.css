@@ -24,3 +24,29 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* The shift receipt "prints" in on mount — replays on every day switch
+   since ReceiptCard is keyed by day. Disabled for reduced-motion, same
+   as the thermal-receipt animation on the arqa job page itself. */
+@keyframes receipt-print {
+  from {
+    clip-path: inset(0 0 100% 0);
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.receipt-print {
+  animation: receipt-print 0.45s cubic-bezier(0.3, 0.7, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .receipt-print {
+    animation: none;
+  }
+}

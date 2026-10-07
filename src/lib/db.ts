@@ -2,9 +2,9 @@ import Database from "better-sqlite3";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { dayKeyOf } from "@/lib/date";
+import { dayKeyOf, last7Days } from "@/lib/date";
 import seedTrips from "@/data/trips-seed.json";
-import type { PaymentMethod, Trip } from "@/lib/shift";
+import { summarize, type PaymentMethod, type Trip } from "@/lib/shift";
 
 function resolveDbPath(): string {
   if (process.env.SHIFT_DB_PATH) return process.env.SHIFT_DB_PATH;
@@ -114,6 +114,30 @@ export function fingerprintTrip(input: {
     commission: input.commission,
   });
   return createHash("sha256").update(normalized).digest("hex").slice(0, 24);
+}
+
+export interface DayNet {
+  date: string;
+  net: number;
+  count: number;
+}
+
+/** Net earnings for each of the 7 days ending on `day`, oldest first. */
+export function weeklyNet(day: string): DayNet[] {
+  return last7Days(day).map((date) => {
+    const summary = summarize(tripsForDay(date));
+    return { date, net: summary.net, count: summary.count };
+  });
+}
+
+/** All-time totals across every trip ever recorded, for the profile header. */
+export function allTimeTotals(): { totalTrips: number; totalNet: number } {
+  const row = getDb()
+    .prepare(
+      "SELECT COUNT(*) as totalTrips, COALESCE(SUM(amount - commission), 0) as totalNet FROM trips",
+    )
+    .get() as { totalTrips: number; totalNet: number };
+  return row;
 }
 
 /** Test-only: wipe and reseed so each test file starts from a known state. */

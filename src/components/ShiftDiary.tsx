@@ -1,14 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import useSWR from "swr";
 import { shiftDayKey } from "@/lib/date";
 import type { DaySummary, PaymentMethod, Trip } from "@/lib/shift";
 
 const DEFAULT_DAY = "2026-10-01";
 const SHIFT_OFFSET = "+05:00";
+const WEEKDAYS_RU = ["Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"];
 
 type DayResponse = { date: string; trips: Trip[]; summary: DaySummary };
+type TrendResponse = {
+  days: { date: string; net: number; count: number }[];
+  best: string;
+};
+type ProfileResponse = {
+  name: string;
+  initials: string;
+  car: string;
+  rating: number;
+  totalTrips: number;
+  totalNet: number;
+};
 
 const money = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
 function tenge(amount: number): string {
@@ -24,10 +37,51 @@ function timeOf(iso: string): string {
   return iso.slice(11, 16);
 }
 
-async function fetchDay(url: string): Promise<DayResponse> {
+function weekdayShort(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return WEEKDAYS_RU[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
   return res.json();
+}
+
+/**
+ * Animates a number from its previous value to `target` over `duration`ms.
+ * The state update happens inside a requestAnimationFrame callback — an
+ * external-system subscription, not a synchronous effect body — which is
+ * the pattern React's own effect-rules docs call out as fine.
+ */
+function useCountUp(target: number, duration = 500): number {
+  const [value, setValue] = useState(target);
+  const prevRef = useRef(target);
+
+  useEffect(() => {
+    const from = prevRef.current;
+    const to = target;
+    if (from === to) return;
+
+    const start = performance.now();
+    let frame: number;
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setValue(Math.round(from + (to - from) * eased));
+      if (t < 1) {
+        frame = requestAnimationFrame(tick);
+      } else {
+        prevRef.current = to;
+      }
+    };
+
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target, duration]);
+
+  return value;
 }
 
 export default function ShiftDiary() {
@@ -35,11 +89,15 @@ export default function ShiftDiary() {
   const [formOpen, setFormOpen] = useState(false);
   const { data, error, isLoading, mutate } = useSWR(
     `/api/days/${day}`,
-    fetchDay,
+    fetchJson<DayResponse>,
   );
+  const { data: trend } = useSWR(`/api/trend/${day}`, fetchJson<TrendResponse>);
+  const { data: profile } = useSWR("/api/profile", fetchJson<ProfileResponse>);
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col gap-4 bg-[#EEF1F5] px-4 py-6">
+      <ProfileHeader profile={profile ?? null} />
+
       <DaySwitcher day={day} onChange={setDay} />
 
       {error && (
@@ -48,7 +106,14 @@ export default function ShiftDiary() {
         </p>
       )}
 
-      <ReceiptCard day={day} summary={data?.summary ?? null} loading={isLoading} />
+      <ReceiptCard
+        key={day}
+        day={day}
+        summary={data?.summary ?? null}
+        loading={isLoading}
+      />
+
+      <WeeklyTrend day={day} trend={trend ?? null} onPick={setDay} />
 
       <button
         onClick={() => setFormOpen((open) => !open)}
@@ -68,6 +133,34 @@ export default function ShiftDiary() {
       )}
 
       <TripList trips={data?.trips ?? []} loading={isLoading} />
+    </div>
+  );
+}
+
+function ProfileHeader({ profile }: { profile: ProfileResponse | null }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl bg-white px-4 py-3 shadow-sm">
+      <div className="flex h-11 w-11 flex-none items-center justify-center rounded-full bg-[#2D5BE3] font-mono text-sm font-semibold text-white">
+        {profile?.initials ?? "··"}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold text-[#1C2633]">
+          {profile?.name ?? "Загрузка…"}
+        </div>
+        <div className="truncate text-xs text-[#6B7788]">
+          {profile ? profile.car : " "}
+        </div>
+      </div>
+      {profile && (
+        <div className="flex-none text-right">
+          <div className="text-xs font-semibold text-[#8A4B08]">
+            ★ {profile.rating.toFixed(1)}
+          </div>
+          <div className="text-[11px] text-[#6B7788]">
+            {profile.totalTrips} поездок · {tenge(profile.totalNet)}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -111,8 +204,10 @@ function ReceiptCard({
   summary: DaySummary | null;
   loading: boolean;
 }) {
+  const net = useCountUp(summary?.net ?? 0);
+
   return (
-    <div className="rounded-2xl bg-[#FFF8E1] p-6 font-mono text-sm text-[#2B2618] shadow-md">
+    <div className="receipt-print rounded-2xl bg-[#FFF8E1] p-6 font-mono text-sm text-[#2B2618] shadow-md">
       <div className="text-center font-semibold">Дневник смен</div>
       <div className="mb-3 text-center text-[#7A7058]">{formatDay(day)}</div>
 
@@ -130,9 +225,7 @@ function ReceiptCard({
           <div className="my-3 border-t border-dashed border-[#CDBF95]" />
           <div className="flex items-baseline justify-between">
             <span>На руки</span>
-            <strong className="text-xl text-[#1C2633]">
-              {tenge(summary.net)}
-            </strong>
+            <strong className="text-xl text-[#1C2633]">{tenge(net)}</strong>
           </div>
         </>
       )}
@@ -145,6 +238,69 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex justify-between gap-3 py-0.5">
       <span>{label}</span>
       <span>{value}</span>
+    </div>
+  );
+}
+
+function WeeklyTrend({
+  day,
+  trend,
+  onPick,
+}: {
+  day: string;
+  trend: TrendResponse | null;
+  onPick: (day: string) => void;
+}) {
+  if (!trend) return null;
+
+  const max = Math.max(1, ...trend.days.map((d) => d.net));
+  const best = trend.days.find((d) => d.date === trend.best);
+
+  return (
+    <div className="rounded-xl bg-white px-4 py-3 shadow-sm">
+      <div className="mb-3 flex items-baseline justify-between">
+        <span className="text-sm font-semibold text-[#1C2633]">
+          Неделя
+        </span>
+        {best && (
+          <span className="text-xs text-[#8A4B08]">
+            🏆 {weekdayShort(best.date)} · {tenge(best.net)}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-end justify-between gap-2" style={{ height: 64 }}>
+        {trend.days.map((d) => {
+          const isSelected = d.date === day;
+          const heightPct = Math.max(4, (d.net / max) * 100);
+          return (
+            <button
+              key={d.date}
+              onClick={() => onPick(d.date)}
+              aria-label={`${formatDay(d.date)}: ${tenge(d.net)}`}
+              className="flex h-full flex-1 flex-col items-center justify-end gap-1"
+            >
+              <div
+                className={
+                  "w-full max-w-[22px] rounded-t-[4px] transition-all " +
+                  (isSelected ? "bg-[#2D5BE3]" : "bg-[#C7D0DE]")
+                }
+                style={{ height: `${heightPct}%` }}
+              />
+              <span
+                className={
+                  "text-[10px] " +
+                  (isSelected
+                    ? "font-semibold text-[#2D5BE3]"
+                    : "text-[#6B7788]")
+                }
+              >
+                {weekdayShort(d.date)}
+              </span>
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

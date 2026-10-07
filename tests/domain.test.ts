@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayKeyOf, isValidDayKey, shiftDayKey } from "@/lib/date";
+import { dayKeyOf, isValidDayKey, last7Days, shiftDayKey } from "@/lib/date";
 import { summarize, type Trip } from "@/lib/shift";
 
 describe("summarize", () => {
@@ -86,5 +86,19 @@ describe("shiftDayKey", () => {
   it("steps forward and backward across a month boundary", () => {
     expect(shiftDayKey("2026-09-30", 1)).toBe("2026-10-01");
     expect(shiftDayKey("2026-10-01", -1)).toBe("2026-09-30");
+  });
+});
+
+describe("last7Days", () => {
+  it("returns 7 consecutive days ending on the given day, oldest first", () => {
+    expect(last7Days("2026-10-01")).toEqual([
+      "2026-09-25",
+      "2026-09-26",
+      "2026-09-27",
+      "2026-09-28",
+      "2026-09-29",
+      "2026-09-30",
+      "2026-10-01",
+    ]);
   });
 });

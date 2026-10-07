@@ -1,6 +1,8 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it } from "vitest";
 import { GET } from "@/app/api/days/[date]/route";
+import { GET as GET_PROFILE } from "@/app/api/profile/route";
+import { GET as GET_TREND } from "@/app/api/trend/[date]/route";
 import { POST } from "@/app/api/trips/route";
 import { resetDb } from "@/lib/db";
 
@@ -19,6 +21,12 @@ function postTrip(body: unknown) {
 
 function getDay(date: string) {
   return GET(new NextRequest(`http://localhost/api/days/${date}`), {
+    params: Promise.resolve({ date }),
+  });
+}
+
+function getTrend(date: string) {
+  return GET_TREND(new NextRequest(`http://localhost/api/trend/${date}`), {
     params: Promise.resolve({ date }),
   });
 }
@@ -147,5 +155,55 @@ describe("POST /api/trips", () => {
 
     const dayPayload = await (await getDay("2026-10-08")).json();
     expect(dayPayload.summary.count).toBe(2);
+  });
+});
+
+describe("GET /api/trend/[date]", () => {
+  it("returns 7 days ending on the given date, with the highest-net day marked best", async () => {
+    const res = await getTrend("2026-10-01");
+    expect(res.status).toBe(200);
+    const payload = await res.json();
+
+    expect(payload.days).toHaveLength(7);
+    expect(payload.days[0].date).toBe("2026-09-25");
+    expect(payload.days[6].date).toBe("2026-10-01");
+
+    // Seeded so 2026-09-28 is the best day of this window (net 7650),
+    // ahead of 2026-10-01 itself (net 5015) — exercises a "best day" that
+    // isn't just whichever day happens to be selected.
+    expect(payload.best).toBe("2026-09-28");
+  });
+
+  it("rejects a malformed date", async () => {
+    const res = await getTrend("not-a-date");
+    expect(res.status).toBe(400);
+  });
+});
+
+describe("GET /api/profile", () => {
+  it("returns lifetime totals computed from the seeded trips", async () => {
+    const res = await GET_PROFILE();
+    expect(res.status).toBe(200);
+    const payload = await res.json();
+
+    expect(payload.totalTrips).toBeGreaterThan(0);
+    expect(typeof payload.totalNet).toBe("number");
+    expect(payload.name).toBeTruthy();
+  });
+
+  it("grows totalTrips after a new trip is added", async () => {
+    const before = await (await GET_PROFILE()).json();
+
+    await postTrip({
+      start: "2026-10-09T08:00:00+05:00",
+      end: "2026-10-09T08:10:00+05:00",
+      amount: 500,
+      payment: "cash",
+      commission: 75,
+    });
+
+    const after = await (await GET_PROFILE()).json();
+    expect(after.totalTrips).toBe(before.totalTrips + 1);
+    expect(after.totalNet).toBe(before.totalNet + 425);
   });
 });

@@ -32,3 +32,8 @@ export function shiftDayKey(day: string, deltaDays: number): string {
   const next = new Date(Date.UTC(year, month - 1, date + deltaDays));
   return next.toISOString().slice(0, 10);
 }
+
+/** The 7 calendar days ending on `day` (inclusive), oldest first. */
+export function last7Days(day: string): string[] {
+  return Array.from({ length: 7 }, (_, i) => shiftDayKey(day, i - 6));
+}

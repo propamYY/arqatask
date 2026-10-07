@@ -122,20 +122,22 @@ export default function ShiftDiary() {
       <WeeklyTrend day={day} trend={trend ?? null} onPick={setDay} />
 
       <button
-        onClick={() => setFormOpen((open) => !open)}
+        onClick={() => setFormOpen(true)}
         className="rounded-xl bg-[#2D5BE3] px-4 py-3 text-sm font-semibold text-white transition active:bg-[#1F45B8]"
       >
-        {formOpen ? "Закрыть форму" : "+ Добавить поездку"}
+        + Добавить поездку
       </button>
 
       {formOpen && (
-        <AddTripForm
-          day={day}
-          onAdded={() => {
-            setFormOpen(false);
-            mutate();
-          }}
-        />
+        <Modal title="Новая поездка" onClose={() => setFormOpen(false)}>
+          <AddTripForm
+            day={day}
+            onAdded={() => {
+              setFormOpen(false);
+              mutate();
+            }}
+          />
+        </Modal>
       )}
 
       <TripList trips={data?.trips ?? []} loading={isLoading} />
@@ -197,6 +199,56 @@ function DaySwitcher({
       >
         →
       </button>
+    </div>
+  );
+}
+
+function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-[#1C2633]/40 p-4 sm:items-center"
+      onClick={onClose}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-md rounded-2xl bg-white p-4 shadow-xl"
+      >
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-[#1C2633]">{title}</h2>
+          <button
+            aria-label="Закрыть"
+            onClick={onClose}
+            className="rounded-full p-1.5 text-[#6B7788] active:bg-[#F4F7FF]"
+          >
+            ✕
+          </button>
+        </div>
+        {children}
+      </div>
     </div>
   );
 }
@@ -404,10 +456,7 @@ function AddTripForm({
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="flex flex-col gap-3 rounded-xl bg-white p-4 shadow-sm"
-    >
+    <form onSubmit={handleSubmit} className="flex flex-col gap-3">
       <div className="grid grid-cols-2 gap-3">
         <label className="text-sm font-medium text-[#1C2633]">
           Начало
